@@ -59,11 +59,11 @@ const AdminAccessSection: FC<AdminAccessSectionProps> = ({setActiveView, userDat
                     <div className="mt-4 pt-4 border-t border-slate-200 theme-athlete:border-slate-700">
                         <button
                             onClick={() => setIsHistoryVisible(!isHistoryVisible)}
-                            className="w-full flex justify-between items-center text-sm font-semibold text-slate-700 hover:text-slate-900"
+                            className="w-full flex justify-between items-center text-sm font-semibold text-brand-green hover:text-brand-green-dark transition-colors"
                             aria-expanded={isHistoryVisible}
                         >
                             Histórico de Modificações
-                            <ChevronDownIcon className={`w-5 h-5 text-slate-500 transition-transform ${isHistoryVisible ? 'rotate-180' : ''}`} />
+                            <ChevronDownIcon className={`w-5 h-5 text-brand-green transition-transform ${isHistoryVisible ? 'rotate-180' : ''}`} />
                         </button>
                         <div className={`collapsible-content ${isHistoryVisible ? 'open' : ''}`}>
                             <ul className="mt-3 space-y-2 text-xs text-slate-500">

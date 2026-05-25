@@ -13,7 +13,7 @@ interface SubscriptionModalProps {
     isOpen: boolean;
     onClose: () => void;
     onSubscribe: (plan: PlanKey, billingCycle: 'monthly' | 'annual') => void;
-    theme: 'theme-light' | 'theme-athlete';
+    theme: 'theme-light' | 'theme-athlete' | 'theme-dark';
 }
 
 const LoadingSpinner: React.FC<{className?: string}> = ({ className }) => (

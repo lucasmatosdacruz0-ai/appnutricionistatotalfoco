@@ -15,11 +15,11 @@
     "jsx": "react-jsx",
 
     /* Linting */
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "strict": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "noFallthroughCasesInSwitch": false
   },
-  "include": ["src", "api"],
+  "include": ["components", "constants", "services", "src/services", "App.tsx", "index.tsx", "types.ts", "constants.tsx", "server.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

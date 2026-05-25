@@ -2,6 +2,7 @@ import { PlanKey } from '../types';
 
 export const ALL_FEATURES = {
     weeklyPlanGenerations: { key: 'weeklyPlanGenerations', text: 'Geração de Plano Semanal', aLaCartePrice: 4.99, aLaCartePackSize: 4 },
+    monthlyPlanGenerations: { key: 'monthlyPlanGenerations', text: 'Geração de Plano Mensal', aLaCartePrice: 14.99, aLaCartePackSize: 1 },
     dailyPlanGenerations: { key: 'dailyPlanGenerations', text: 'Geração de Plano Diário', aLaCartePrice: 2.99, aLaCartePackSize: 10 },
     dayRegenerations: { key: 'dayRegenerations', text: 'Regenerar Dia Inteiro', aLaCartePrice: 2.99, aLaCartePackSize: 10 },
     chatImports: { key: 'chatImports', text: 'Importar Plano do Chat', aLaCartePrice: 1.99, aLaCartePackSize: 5 },
@@ -27,6 +28,7 @@ export const PLANS: Record<PlanKey, any> = {
     recommended: false,
     features: [
       { ...ALL_FEATURES.weeklyPlanGenerations, limit: 1, period: 'week', value: '1/semana' },
+      { ...ALL_FEATURES.monthlyPlanGenerations, limit: 1, period: 'month', value: '1/mês' },
       { ...ALL_FEATURES.dailyPlanGenerations, limit: 2, period: 'day', value: '2/dia' },
       { ...ALL_FEATURES.dayRegenerations, limit: 2, period: 'day', value: '2/dia' },
       { ...ALL_FEATURES.chatImports, limit: 1, period: 'day', value: '1/dia' },
@@ -49,6 +51,7 @@ export const PLANS: Record<PlanKey, any> = {
     recommended: true,
     features: [
       { ...ALL_FEATURES.weeklyPlanGenerations, limit: 4, period: 'week', value: '4/semana' },
+      { ...ALL_FEATURES.monthlyPlanGenerations, limit: 1, period: 'month', value: '1/mês' },
       { ...ALL_FEATURES.dailyPlanGenerations, limit: 10, period: 'day', value: '10/dia' },
       { ...ALL_FEATURES.dayRegenerations, limit: 10, period: 'day', value: '10/dia' },
       { ...ALL_FEATURES.chatImports, limit: 10, period: 'day', value: '10/dia' },
@@ -71,6 +74,7 @@ export const PLANS: Record<PlanKey, any> = {
     recommended: false,
     features: [
       { ...ALL_FEATURES.weeklyPlanGenerations, limit: Infinity, value: 'Ilimitado' },
+      { ...ALL_FEATURES.monthlyPlanGenerations, limit: 2, period: 'month', value: '2/mês' },
       { ...ALL_FEATURES.dailyPlanGenerations, limit: Infinity, value: 'Ilimitado' },
       { ...ALL_FEATURES.dayRegenerations, limit: Infinity, value: 'Ilimitado' },
       { ...ALL_FEATURES.chatImports, limit: Infinity, value: 'Ilimitado' },

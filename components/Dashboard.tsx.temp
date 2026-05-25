@@ -6,7 +6,7 @@ import Modal from './Modal';
 import LogMealModal from './LogMealModal';
 import WaterReminderModal from './WaterReminderModal';
 import AdjustGoalModal from './AdjustGoalModal';
-import { MacroData, WaterReminderSettings, UserData, UserDataHandlers, View, UserMacros } from '../types';
+import { WaterReminderSettings, UserData, UserDataHandlers, View, DietDifficulty, DailyPlan, UserMacros } from '../types';
 import { GraphIcon } from './icons/GraphIcon';
 import { FireIcon } from './icons/FireIcon';
 import { WaterDropletsIcon } from './icons/WaterDropletsIcon';
@@ -21,23 +21,31 @@ import { TrophyIcon } from './icons/TrophyIcon';
 import { calculateXPForLevel } from './utils/xpUtils';
 import { QuestionMarkCircleIcon } from './icons/QuestionMarkCircleIcon';
 import SubscriptionCTA from './SubscriptionCTA';
+// FIX: Import DietModeSelector from PlanoAlimentarView to ensure consistent UI and logic.
+import { DietModeSelector } from './PlanoAlimentarView';
+// FIX: Import TodaysDietCard
+import TodaysDietCard from './TodaysDietCard';
+import { SparklesIcon } from './icons/SparklesIcon';
 
 
 interface DashboardProps {
     userData: UserData;
     handlers: UserDataHandlers;
     setActiveView: (view: View) => void;
+    // The `mealPlan` prop is not directly used in this component.
+    mealPlan: Record<string, DailyPlan> | null; 
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView }) => {
+const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView, mealPlan }) => {
     const { name, weight, water, macros, waterReminders, initialWeight, weightGoal, waterGoal, profilePicture, streak, completedDays, level, xp } = userData;
     const { updateUserData, addWater, handleLogMeal, handleUpdateWeight, handleMarkDayAsCompleted, handleChangeDietDifficulty } = handlers;
+    
+    const isDark = userData.darkMode || userData.dietDifficulty === 'athlete';
     
     const [isWeightModalOpen, setWeightModalOpen] = useState(false);
     const [isMealModalOpen, setMealModalOpen] = useState(false);
     const [isWaterReminderModalOpen, setWaterReminderModalOpen] = useState(false);
     const [isAdjustGoalModalOpen, setAdjustGoalModalOpen] = useState(false);
-    const [isShaking, setIsShaking] = useState(false);
     
     const [newWeight, setNewWeight] = useState(weight.toString());
 
@@ -58,7 +66,12 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
 
     const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
     const isTodayCompleted = useMemo(() => completedDays.includes(todayStr), [completedDays, todayStr]);
-    const isAthleteMode = userData.dietDifficulty === 'athlete';
+
+    const todaysPlan = useMemo(() => {
+        if (!mealPlan) return null;
+        const todayKey = new Date().toISOString().split('T')[0];
+        return mealPlan[todayKey];
+    }, [mealPlan]);
 
     const getGreeting = () => {
         const hour = new Date().getHours();
@@ -96,6 +109,7 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
         setWeightModalOpen(false);
     };
     
+    // FIX: Updated `handleSaveNewGoal` to pass `newMacros` to `updateUserData`
     const handleSaveNewGoal = (newWeightGoal: number, newMacros: UserMacros) => {
         updateUserData({
             weightGoal: newWeightGoal,
@@ -117,31 +131,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
             });
         }
     };
-
-    useEffect(() => {
-        if (userData.isSubscribed) {
-            setIsShaking(false);
-            return;
-        }
-
-        let shakeTimeout: ReturnType<typeof setTimeout>;
-        let shakeInterval: ReturnType<typeof setInterval>;
-
-        const triggerShake = () => {
-            setIsShaking(true);
-            shakeTimeout = setTimeout(() => setIsShaking(false), 820); // Animation duration
-        };
-        
-        const initialTimeout = setTimeout(triggerShake, 1200); // Shake once on load
-        shakeInterval = setInterval(triggerShake, 8000); // Shake every 8 seconds
-
-        return () => {
-            clearTimeout(initialTimeout);
-            clearTimeout(shakeTimeout);
-            clearInterval(shakeInterval);
-        };
-    }, [userData.isSubscribed]);
-
 
     useEffect(() => {
         if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -176,18 +165,6 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
             scheduledTimers.forEach(clearTimeout);
         };
     }, [waterReminders]);
-
-    const handleAthleteModeClick = () => {
-        if (userData.isSubscribed) {
-            handleChangeDietDifficulty(isAthleteMode ? 'normal' : 'athlete');
-        } else {
-            handlers.openSubscriptionModal();
-        }
-    };
-
-    const athleteButtonText = userData.isSubscribed
-        ? (isAthleteMode ? 'Modo Atleta Ativado' : 'Ativar Modo Atleta')
-        : 'Desbloquear Modo Atleta';
 
     const LevelBadgeButton = () => {
         const xpForNextLevel = calculateXPForLevel(level);
@@ -341,146 +318,161 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
           </div>
       </header>
       
-        <button
-            id="athlete-mode-toggle"
-            onClick={handleAthleteModeClick}
-            className={`w-full p-4 rounded-2xl text-white font-bold text-lg flex items-center justify-center gap-3
-            ${isAthleteMode
-                ? 'athlete-mode-active-button'
-                : 'athlete-mode-inactive-button'
-            } ${isShaking ? 'shake-animation' : ''}`.trim()}
-        >
-            <FireIcon className="w-6 h-6" />
-            <span>{athleteButtonText}</span>
-        </button>
+      <DietModeSelector 
+        currentDifficulty={userData.dietDifficulty} 
+        onChange={handleChangeDietDifficulty}
+        isSubscribed={userData.isSubscribed}
+        openSubscriptionModal={handlers.openSubscriptionModal}
+        isDark={isDark}
+      />
 
-
-      <div className="bg-white/80 backdrop-blur-sm p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-2">
-          <div className="flex justify-between items-center text-sm font-medium">
-              <h3 className="text-slate-600 flex-1">Progresso da meta de peso</h3>
-              <button onClick={() => setAdjustGoalModalOpen(true)} className="text-xs font-semibold text-brand-green hover:underline">Ajustar meta</button>
-              <span className="font-semibold text-slate-800 ml-4">{weight.toFixed(1)}kg <span className="text-slate-400">/ {weightGoal.toFixed(1)}kg</span></span>
+      <div className={`backdrop-blur-sm p-3.5 rounded-xl shadow-sm flex flex-col gap-2 border transition-all duration-300 ${
+          isDark 
+            ? "bg-slate-800/80 border-slate-750 text-slate-100" 
+            : "bg-white/80 border-gray-100 text-slate-800"
+      }`}>
+          <div className="flex justify-between items-center text-xs md:text-sm font-medium">
+              <h3 className={`flex-1 transition-colors ${isDark ? "text-slate-300" : "text-slate-600"}`}>Progresso da meta de peso</h3>
+              <button onClick={() => setAdjustGoalModalOpen(true)} className="text-[11px] md:text-xs font-semibold text-brand-green hover:underline">Ajustar meta</button>
+              <span className={`font-bold ml-4 transition-colors ${isDark ? "text-slate-200" : "text-slate-800"}`}>{weight.toFixed(1)}kg <span className={`transition-colors ${isDark ? "text-slate-500" : "text-slate-400"} font-normal`}>/ {weightGoal.toFixed(1)}kg</span></span>
           </div>
-          <div className="w-full bg-gray-200 rounded-full h-2 theme-athlete:bg-slate-700">
-              <div className="bg-brand-green h-2 rounded-full" style={{ width: `${weightProgress}%` }}></div>
+          <div className={`w-full rounded-full h-2 overflow-hidden transition-colors ${
+              isDark ? "bg-slate-700/50" : "bg-slate-100"
+          }`}>
+              <div className="bg-gradient-to-r from-blue-500 to-indigo-500 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_12px_rgba(59,130,246,0.2)]" style={{ width: `${weightProgress}%` }}></div>
           </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 md:grid-cols-2 lg:grid-cols-4 md:gap-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-2 lg:grid-cols-4 md:gap-4">
         <InfoCard
-            icon={<GraphIcon className="text-brand-blue" />}
-            iconBg="bg-brand-blue-light"
+            icon={<GraphIcon className="text-emerald-600 theme-dark:text-emerald-400" />}
+            iconBg="bg-emerald-100/80 border border-emerald-200 theme-dark:bg-emerald-950/40 theme-dark:border-emerald-900/30"
+            bgClassName="bg-gradient-to-br from-emerald-50/90 via-white/95 to-teal-100/40 border-emerald-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-emerald-950/20 theme-dark:border-emerald-900/30"
         >
-            <h3 className="text-slate-500 font-medium text-sm md:text-base">Peso Atual</h3>
-            <p className="text-2xl md:text-3xl font-bold my-1 text-slate-800">{weight.toFixed(1)} <span className="text-base md:text-xl text-slate-400">kg</span></p>
-            <button onClick={() => { setNewWeight(weight.toString()); setWeightModalOpen(true); }} className="mt-3 w-full bg-brand-green hover:bg-brand-green-dark text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors">
+            <h3 className="text-emerald-800 font-bold text-sm md:text-base theme-dark:text-emerald-200">Peso Atual</h3>
+            <p className="text-2xl md:text-3xl font-extrabold my-1 text-slate-800 theme-dark:text-slate-100">{weight.toFixed(1)} <span className="text-sm md:text-base font-medium text-slate-400 theme-dark:text-slate-500">kg</span></p>
+            <button onClick={() => { setNewWeight(weight.toString()); setWeightModalOpen(true); }} className="mt-3 w-full bg-gradient-to-r from-brand-green to-teal-500 hover:from-brand-green-dark hover:to-teal-600 shadow-md hover:shadow-lg text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-200">
                 Registrar
             </button>
         </InfoCard>
 
         <InfoCard 
-            icon={<WaterDropletsIcon className="text-sky-500"/>} 
-            iconBg="bg-sky-100 theme-athlete:bg-opacity-20"
+            icon={<WaterDropletsIcon className="text-sky-500 theme-dark:text-sky-400"/>} 
+            iconBg="bg-sky-100 border border-sky-200 theme-dark:bg-sky-950/40 theme-dark:border-sky-900/30"
+            bgClassName="bg-gradient-to-br from-sky-50/90 via-white/95 to-blue-100/40 border-sky-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-sky-950/20 theme-dark:border-sky-900/30"
         >
            <div className="flex justify-between items-center mb-1">
-                <h3 className="text-slate-500 font-medium text-sm md:text-base">Água</h3>
-                 <button onClick={() => setWaterReminderModalOpen(true)} className="p-1 rounded-full hover:bg-gray-200 theme-athlete:hover:bg-slate-700 transition-colors -mr-2 -mt-2">
-                    <BellIcon className={`w-5 h-5 ${waterReminders.enabled ? 'text-blue-500 theme-athlete:text-sky-400' : 'text-gray-400'}`} />
+                <h3 className="text-sky-800 font-bold text-sm md:text-base theme-dark:text-sky-200">Água</h3>
+                 <button onClick={() => setWaterReminderModalOpen(true)} className="p-1 rounded-full hover:bg-sky-200/50 theme-dark:hover transition-colors -mr-2 -mt-2">
+                    <BellIcon className={`w-5 h-5 ${waterReminders.enabled ? 'text-blue-500 animate-pulse' : 'text-gray-400'}`} />
                 </button>
             </div>
-           <p className="text-2xl md:text-3xl font-bold text-slate-800">{water.toFixed(2)}<span className="text-base md:text-xl text-slate-400"> / {waterGoal.toFixed(1)}L</span></p>
-           <div className="w-full bg-gray-200 theme-athlete:bg-slate-700 rounded-full h-2 mt-2">
-                <div className="bg-sky-500 h-2 rounded-full" style={{width: `${waterProgress}%`}}></div>
+           <p className="text-2xl md:text-3xl font-extrabold text-slate-800 theme-dark:text-slate-100">{water.toFixed(2)}<span className="text-sm md:text-base font-normal text-slate-400 theme-dark:text-slate-500"> / {waterGoal.toFixed(1)}L</span></p>
+           <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
+                <div className="bg-gradient-to-r from-sky-400 to-blue-500 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(56,189,248,0.25)]" style={{width: `${waterProgress}%`}}></div>
            </div>
            <div className="flex gap-2 mt-3">
-            <button onClick={() => addWater(0.250)} className="flex-1 text-xs bg-white border border-gray-300 hover:bg-gray-100 text-slate-700 font-semibold py-2 px-2 rounded-lg transition-colors theme-athlete:bg-slate-800 theme-athlete:text-slate-300 theme-athlete:hover:bg-slate-700">+250ml</button>
-            <button onClick={() => addWater(0.500)} className="flex-1 text-xs bg-white border border-gray-300 hover:bg-gray-100 text-slate-700 font-semibold py-2 px-2 rounded-lg transition-colors theme-athlete:bg-slate-800 theme-athlete:text-slate-300 theme-athlete:hover:bg-slate-700">+500ml</button>
+            <button onClick={() => addWater(0.250)} className="flex-1 text-xs bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-2 rounded-lg transition-colors shadow-sm theme-dark:bg-sky-650 theme-dark:hover">+250ml</button>
+            <button onClick={() => addWater(0.500)} className="flex-1 text-xs bg-sky-500 hover:bg-sky-600 text-white font-bold py-2 px-2 rounded-lg transition-colors shadow-sm theme-dark:bg-sky-650 theme-dark:hover">+500ml</button>
            </div>
-        </InfoCard>
+         </InfoCard>
 
-        <InfoCard 
-            icon={<UtensilsIcon className="text-purple-600"/>} 
-            iconBg="bg-purple-100"
-        >
-            <h3 className="text-slate-500 font-medium text-sm md:text-base">Registrar Refeição</h3>
-            <p className="text-slate-400 text-sm my-1 leading-tight">Analise sua comida com IA, por texto ou foto.</p>
-            <button 
-                onClick={() => setMealModalOpen(true)} 
-                className="mt-3 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors"
-            >
-                Registrar Refeição
-            </button>
-        </InfoCard>
+         <InfoCard 
+            icon={<UtensilsIcon className="text-purple-600 theme-dark:text-purple-400"/>} 
+            iconBg="bg-purple-100 border border-purple-200 theme-dark:bg-purple-950/40 theme-dark:border-purple-900/30"
+            bgClassName="bg-gradient-to-br from-purple-50/90 via-white/95 to-indigo-100/40 border-purple-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-purple-950/20 theme-dark:border-purple-900/30"
+         >
+             <h3 className="text-purple-800 font-bold text-sm md:text-base theme-dark:text-purple-200">Registrar Refeição</h3>
+             <p className="text-purple-650 text-xs md:text-sm my-1 leading-tight mb-2 theme-dark:text-purple-300/80">Analise sua comida com IA, por texto ou foto.</p>
+             <button 
+                 onClick={() => setMealModalOpen(true)} 
+                 className="mt-auto w-full bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 shadow-md hover:shadow-lg text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-200"
+             >
+                 Registrar Refeição
+             </button>
+         </InfoCard>
+         
+         <InfoCard 
+             icon={<FireIcon className="text-amber-600 theme-dark:text-amber-400"/>} 
+             iconBg="bg-amber-100 border border-amber-200 theme-dark:bg-amber-950/40 theme-dark:border-amber-900/30"
+             bgClassName="bg-gradient-to-br from-amber-50/90 via-white/95 to-orange-100/40 border-amber-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-amber-950/20 theme-dark:border-amber-900/30"
+         >
+             <h3 className="text-amber-800 font-bold text-sm md:text-base theme-dark:text-amber-200">Sequência de Metas</h3>
+             <p className="text-2xl md:text-3xl font-extrabold my-1 text-slate-800 theme-dark:text-slate-100">{streak} <span className="text-sm md:text-base font-normal text-slate-400 theme-dark:text-slate-500">dias</span></p>
+             <button 
+                 onClick={handleMarkDayAsCompleted} 
+                 disabled={isTodayCompleted}
+                 className="mt-3 w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 shadow-md hover:shadow-lg disabled:opacity-50 text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-200 disabled:from-slate-400 disabled:to-slate-400 disabled:shadow-none disabled:cursor-not-allowed"
+             >
+                 {isTodayCompleted ? <><CheckIcon className="w-5 h-5"/> Meta Concluída</> : 'Concluir Meta'}
+             </button>
+         </InfoCard>
+
+         <InfoCard 
+             icon={<FireIcon className="text-rose-500 theme-dark:text-rose-400"/>} 
+             iconBg="bg-rose-100 border border-rose-200 theme-dark:bg-rose-950/40 theme-dark:border-rose-900/30"
+             bgClassName="bg-gradient-to-br from-rose-50/90 via-white/95 to-orange-100/40 border-rose-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-rose-950/20 theme-dark:border-rose-900/30"
+         >
+             <h3 className="text-rose-800 font-bold text-sm md:text-base theme-dark:text-rose-200">Calorias</h3>
+             <p className="text-2xl md:text-3xl font-extrabold my-1 text-slate-800 theme-dark:text-slate-100">{macros.calories.current}
+                 <span className="text-sm md:text-base font-normal text-slate-400 theme-dark:text-slate-500"> / {macros.calories.goal}kcal</span>
+             </p>
+             <div className="w-full bg-slate-100 rounded-full h-2 mt-3 overflow-hidden">
+                 <div className="bg-gradient-to-r from-amber-500 to-orange-500 h-full rounded-full transition-all duration-500 ease-out shadow-[0_0_10px_rgba(249,115,22,0.25)]" style={{ width: `${Math.min((macros.calories.current / macros.calories.goal) * 100, 100)}%` }}></div>
+             </div>
+         </InfoCard>
+         
+         <InfoCard 
+             icon={<QuestionMarkCircleIcon className="text-blue-600 theme-dark:text-blue-400"/>} 
+             iconBg="bg-blue-100 border border-blue-200 theme-dark:bg-blue-950/40 theme-dark:border-blue-900/30"
+             bgClassName="bg-gradient-to-br from-blue-50/70 via-white/95 to-indigo-100/40 border-blue-100/90 shadow-sm theme-dark:from-slate-800/80 theme-dark:via-slate-800/90 theme-dark:to-indigo-950/20 theme-dark:border-indigo-900/30"
+         >
+             <h3 className="text-blue-800 font-bold text-sm md:text-base theme-dark:text-blue-200">Ajuda & Tutorial</h3>
+             <p className="text-blue-650 text-xs md:text-sm my-1 leading-tight mb-2 theme-dark:text-blue-300/80">Não sabe por onde começar? Refaça nosso tour guiado.</p>
+             <button 
+                 onClick={handlers.startTutorial} 
+                 className="mt-auto w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 shadow-md hover:shadow-lg text-white font-bold py-2.5 px-4 rounded-xl flex items-center justify-center gap-2 text-sm transition-all duration-200"
+             >
+                 Iniciar Tour
+             </button>
+         </InfoCard>
+
+        {/* FIX: Use TodaysDietCard to display current day's meal plan */}
+        <TodaysDietCard plan={todaysPlan} setActiveView={setActiveView} className="col-span-2 shadow-sm" isDark={isDark} />
         
-        <InfoCard 
-            icon={<FireIcon className="text-orange-500"/>} 
-            iconBg="bg-orange-100"
-        >
-            <h3 className="text-slate-500 font-medium text-sm md:text-base">Sequência de Metas</h3>
-            <p className="text-2xl md:text-3xl font-bold my-1 text-slate-800">{streak} <span className="text-base md:text-xl text-slate-400">dias</span></p>
-            <button 
-                onClick={handleMarkDayAsCompleted} 
-                disabled={isTodayCompleted}
-                className="mt-3 w-full bg-teal-500 hover:bg-teal-600 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors disabled:bg-slate-400 disabled:cursor-not-allowed"
-            >
-                {isTodayCompleted ? <><CheckIcon className="w-5 h-5"/> Meta Concluída</> : 'Concluir Meta do Dia'}
-            </button>
-        </InfoCard>
-
-        <InfoCard 
-            icon={<FireIcon className="text-brand-orange"/>} 
-            iconBg="bg-brand-orange-light"
-        >
-            <h3 className="text-slate-500 font-medium text-sm md:text-base">Calorias</h3>
-            <p className="text-2xl md:text-3xl font-bold my-1 text-slate-800">{macros.calories.current}
-                <span className="text-base md:text-xl text-slate-400"> / {macros.calories.goal}kcal</span>
-            </p>
-            <div className="w-full bg-gray-200 theme-athlete:bg-slate-700 rounded-full h-2 mt-2">
-                <div className="bg-brand-orange h-2 rounded-full" style={{ width: `${Math.min((macros.calories.current / macros.calories.goal) * 100, 100)}%` }}></div>
-            </div>
-        </InfoCard>
-        
-        <InfoCard 
-            icon={<QuestionMarkCircleIcon className="text-purple-600"/>} 
-            iconBg="bg-purple-100"
-        >
-            <h3 className="text-slate-500 font-medium text-sm md:text-base">Ajuda & Tutorial</h3>
-            <p className="text-slate-400 text-sm my-1 leading-tight">Não sabe por onde começar? Refaça nosso tour guiado.</p>
-            <button 
-                onClick={handlers.startTutorial} 
-                className="mt-3 w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors"
-            >
-                Iniciar Tour
-            </button>
-        </InfoCard>
-
         <InfoCard 
             icon={<CalendarIcon className="text-brand-green"/>} 
             iconBg="bg-brand-green-light"
             className="col-span-2"
         >
-            <h3 className="text-slate-500 font-medium mb-3">Macronutrientes</h3>
+            <h3 className="text-slate-800 font-bold mb-3 text-lg">Macronutrientes de Hoje</h3>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-4">
                 <div>
                     <div className="flex justify-between items-center text-sm">
-                        <span className="font-medium text-slate-600">Carboidratos</span>
-                        <span className="font-semibold text-slate-800">{macros.carbs.current}g / {macros.carbs.goal}g</span>
+                        <span className="font-semibold text-slate-600">Carboidratos</span>
+                        <span className="font-bold text-slate-800">{macros.carbs.current}g <span className="text-slate-400 font-normal">/ {macros.carbs.goal}g</span></span>
                     </div>
-                    <div className="w-full bg-gray-200 theme-athlete:bg-slate-700 rounded-full h-2 mt-1"><div className="bg-sky-500 h-2 rounded-full" style={{ width: `${Math.min((macros.carbs.current / macros.carbs.goal) * 100, 100)}%` }}></div></div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 mt-1.5 overflow-hidden">
+                        <div className="bg-gradient-to-r from-sky-400 to-blue-500 h-full rounded-full shadow-[0_0_10px_rgba(56,189,248,0.25)]" style={{ width: `${Math.min((macros.carbs.current / macros.carbs.goal) * 100, 100)}%` }}></div>
+                    </div>
                 </div>
                 <div>
                     <div className="flex justify-between items-center text-sm">
-                        <span className="font-medium text-slate-600">Proteínas</span>
-                        <span className="font-semibold text-slate-800">{macros.protein.current}g / {macros.protein.goal}g</span>
+                        <span className="font-semibold text-slate-600">Proteínas</span>
+                        <span className="font-bold text-slate-800">{macros.protein.current}g <span className="text-slate-400 font-normal">/ {macros.protein.goal}g</span></span>
                     </div>
-                    <div className="w-full bg-gray-200 theme-athlete:bg-slate-700 rounded-full h-2 mt-1"><div className="bg-emerald-500 theme-athlete:bg-red-500 h-2 rounded-full" style={{ width: `${Math.min((macros.protein.current / macros.protein.goal) * 100, 100)}%` }}></div></div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 mt-1.5 overflow-hidden">
+                        <div className="bg-gradient-to-r from-emerald-400 to-teal-500 h-full rounded-full shadow-[0_0_10px_rgba(52,211,153,0.25)]" style={{ width: `${Math.min((macros.protein.current / macros.protein.goal) * 100, 100)}%` }}></div>
+                    </div>
                 </div>
                 <div>
                     <div className="flex justify-between items-center text-sm">
-                        <span className="font-medium text-slate-600">Gorduras</span>
-                        <span className="font-semibold text-slate-800">{macros.fat.current}g / {macros.fat.goal}g</span>
+                        <span className="font-semibold text-slate-600">Gorduras</span>
+                        <span className="font-bold text-slate-800">{macros.fat.current}g <span className="text-slate-400 font-normal">/ {macros.fat.goal}g</span></span>
                     </div>
-                    <div className="w-full bg-gray-200 theme-athlete:bg-slate-700 rounded-full h-2 mt-1"><div className="bg-amber-500 theme-athlete:bg-yellow-500 h-2 rounded-full" style={{ width: `${Math.min((macros.fat.current / macros.fat.goal) * 100, 100)}%` }}></div></div>
+                    <div className="w-full bg-slate-100 rounded-full h-2 mt-1.5 overflow-hidden">
+                        <div className="bg-gradient-to-r from-amber-400 to-orange-500 h-full rounded-full shadow-[0_0_10px_rgba(245,158,11,0.25)]" style={{ width: `${Math.min((macros.fat.current / macros.fat.goal) * 100, 100)}%` }}></div>
+                    </div>
                 </div>
             </div>
         </InfoCard>
@@ -499,13 +491,13 @@ const Dashboard: React.FC<DashboardProps> = ({ userData, handlers, setActiveView
                     autoFocus
                 />
                 <div className="mt-4 flex justify-end gap-3">
-                    <button type="button" onClick={() => setWeightModalOpen(false)} className="px-4 py-2 bg-gray-200 text-slate-800 rounded-md hover:bg-gray-300 theme-athlete:bg-slate-700 theme-athlete:text-slate-300 theme-athlete:hover:bg-slate-600">Cancelar</button>
+                    <button type="button" onClick={() => setWeightModalOpen(false)} className="px-4 py-2 bg-gray-200 text-slate-800 rounded-md hover:bg-gray-300">Cancelar</button>
                     <button type="submit" className="px-4 py-2 bg-brand-green text-white rounded-md hover:bg-brand-green-dark">Salvar</button>
                 </div>
             </form>
         </Modal>
 
-        {isMealModalOpen && <LogMealModal onClose={() => setMealModalOpen(false)} onLogMeal={handlers.handleLogMeal} handlers={handlers} userData={userData} />}
+        {isMealModalOpen && <LogMealModal onClose={() => setMealModalOpen(false)} onLogMeal={handlers.handleLogMeal} handlers={handlers} userData={userData} dailyPlanToday={todaysPlan} />}
         
         {isWaterReminderModalOpen && <WaterReminderModal onClose={() => setWaterReminderModalOpen(false)} onSave={handleSaveWaterReminders} initialSettings={waterReminders} />}
         

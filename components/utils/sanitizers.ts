@@ -1,4 +1,4 @@
-import { DailyPlan, FoodItem, Meal } from '../types';
+import { DailyPlan, FoodItem, Meal, Recipe } from '../../types';
 
 export const sanitizeFoodItem = (item: any): FoodItem | null => {
     if (typeof item !== 'object' || item === null || typeof item.name !== 'string') return null;
@@ -38,7 +38,29 @@ export const sanitizeMeal = (meal: any): Meal | null => {
     };
 };
 
+export const sanitizeRecipe = (recipe: any): Recipe | null => {
+    if (typeof recipe !== 'object' || recipe === null || typeof recipe.title !== 'string') return null;
+    return {
+        id: typeof recipe.id === 'string' ? recipe.id : `recipe-${Date.now()}-${Math.random()}`,
+        title: recipe.title,
+        description: typeof recipe.description === 'string' ? recipe.description : '',
+        prepTime: typeof recipe.prepTime === 'string' ? recipe.prepTime : '',
+        difficulty: recipe.difficulty === 'Fácil' || recipe.difficulty === 'Médio' || recipe.difficulty === 'Difícil' ? recipe.difficulty : 'Médio',
+        servings: typeof recipe.servings === 'string' ? recipe.servings : '',
+        ingredients: Array.isArray(recipe.ingredients) ? recipe.ingredients : [],
+        instructions: Array.isArray(recipe.instructions) ? recipe.instructions : [],
+        nutritionalInfo: typeof recipe.nutritionalInfo === 'object' && recipe.nutritionalInfo !== null ? {
+            calories: typeof recipe.nutritionalInfo.calories === 'string' ? recipe.nutritionalInfo.calories : '',
+            protein: typeof recipe.nutritionalInfo.protein === 'string' ? recipe.nutritionalInfo.protein : '',
+            carbs: typeof recipe.nutritionalInfo.carbs === 'string' ? recipe.nutritionalInfo.carbs : '',
+            fat: typeof recipe.nutritionalInfo.fat === 'string' ? recipe.nutritionalInfo.fat : '',
+        } : { calories: '', protein: '', carbs: '', fat: '' },
+        imagePrompt: typeof recipe.imagePrompt === 'string' ? recipe.imagePrompt : '',
+    };
+};
+
 export const sanitizeDailyPlan = (plan: any): DailyPlan | null => {
+
     if (typeof plan !== 'object' || plan === null || !Array.isArray(plan.meals)) return null;
     const sanitizedMeals = plan.meals.map(sanitizeMeal).filter(Boolean) as Meal[];
 

@@ -1,7 +1,7 @@
 
 
 import React, { useState, useEffect, useCallback, FC } from 'react';
-import { View, UserData, UserDataHandlers, Message, DailyPlan, Recipe, RecipesViewState, NotificationState, UpsellModalState, PlanKey, DietDifficulty, MacroData, FoodItem, Meal } from './types';
+import { View, UserData, UserDataHandlers, Message, DailyPlan, Recipe, RecipesViewState, NotificationState, UpsellModalState, PlanKey, DietDifficulty, MacroData, FoodItem, Meal, MonthlyDietPlan } from './types';
 import OnboardingFlow from './components/OnboardingFlow';
 import Sidebar from './components/Sidebar';
 import BottomNav from './components/BottomNav';
@@ -66,6 +66,7 @@ const defaultUserData: UserData = {
     freeImagesGenerated: 0, currentPlan: null, billingCycle: null,
     dailyUsage: { date: '', dailyPlanGenerations: 0, dayRegenerations: 0, chatImports: 0, macroAdjustments: 0, progressAnalyses: 0, chatInteractions: 0, itemSwaps: 0, mealAnalysesText: 0, mealAnalysesImage: 0 },
     weeklyUsage: { weekStartDate: '', weeklyPlanGenerations: 0, shoppingLists: 0, recipeSearches: 0, imageGen: 0 },
+    monthlyUsage: { monthStartDate: '', monthlyPlanGenerations: 0 },
     nutritionistInfo: null,
     modificationHistory: [],
 };
@@ -175,14 +176,18 @@ const App: FC = () => {
     const checkAndResetUsage = (data: UserData): UserData => {
         const today = new Date().toISOString().split('T')[0];
         const currentWeekStart = getStartOfWeek(new Date()).toISOString().split('T')[0];
+        const currentMonthStart = new Date().toISOString().slice(0, 7); // YYYY-MM
         
         let updatedData = { ...data };
         
-        if (data.dailyUsage?.date !== today) {
+        if (!data.dailyUsage || data.dailyUsage.date !== today) {
             updatedData.dailyUsage = { ...defaultUserData.dailyUsage, date: today };
         }
-        if (data.weeklyUsage?.weekStartDate !== currentWeekStart) {
+        if (!data.weeklyUsage || data.weeklyUsage.weekStartDate !== currentWeekStart) {
             updatedData.weeklyUsage = { ...defaultUserData.weeklyUsage, weekStartDate: currentWeekStart };
+        }
+        if (!data.monthlyUsage || data.monthlyUsage.monthStartDate !== currentMonthStart) {
+            updatedData.monthlyUsage = { ...defaultUserData.monthlyUsage, monthStartDate: currentMonthStart };
         }
         return updatedData;
     };
@@ -205,8 +210,11 @@ const App: FC = () => {
             return true; // Unlimited use
         }
 
-        const isWeekly = feature.period === 'week';
-        const usageData = isWeekly ? userData.weeklyUsage : userData.dailyUsage;
+        const period = feature.period; // 'day' | 'week' | 'month'
+        const usageData = period === 'month' 
+            ? userData.monthlyUsage 
+            : (period === 'week' ? userData.weeklyUsage : userData.dailyUsage);
+            
         const currentUsage = (usageData as any)[featureKey] || 0;
         const purchasedUsage = userData.purchasedUses?.[featureKey] || 0;
 
@@ -218,9 +226,10 @@ const App: FC = () => {
         setUserData(prev => {
             if (!prev) return prev;
             const updatedUsageData = { ...usageData, [featureKey]: currentUsage + amount };
+            const usageProp = period === 'month' ? 'monthlyUsage' : (period === 'week' ? 'weeklyUsage' : 'dailyUsage');
             return {
                 ...prev,
-                [isWeekly ? 'weeklyUsage' : 'dailyUsage']: updatedUsageData,
+                [usageProp]: updatedUsageData,
             };
         });
 
@@ -386,6 +395,89 @@ const App: FC = () => {
             (newPlan: Record<string, DailyPlan>) => setMealPlan(prev => ({...prev, ...newPlan }))
         );
     }, [userData]);
+
+    const generateMonthlyPlan = useCallback(async (observation?: string) => {
+        if (!userData) return;
+        await processPlanGeneration(
+            () => geminiService.generateMonthlyPlan(userData, observation),
+            'monthlyPlanGenerations',
+            (newMonthlyPlan: MonthlyDietPlan) => {
+                setUserData(prev => {
+                    if (!prev) return prev;
+                    const updatedPlans = [newMonthlyPlan, ...(prev.monthlyDietPlans || [])];
+                    return {
+                        ...prev,
+                        monthlyDietPlans: updatedPlans,
+                        activeMonthlyDietPlanId: newMonthlyPlan.id
+                    };
+                });
+                addXP(100, 'monthly_plan_generated');
+                updateUserData({ hasGeneratedPlan: true });
+
+                // AUTOMATICALLY populating weekly & daily plans!
+                const daysArr = [
+                    "Domingo",
+                    "Segunda-feira",
+                    "Terça-feira",
+                    "Quarta-feira",
+                    "Quinta-feira",
+                    "Sexta-feira",
+                    "Sábado",
+                ];
+                
+                const baseWeekStart = getStartOfWeek(new Date());
+                const autoPlans: Record<string, DailyPlan> = {};
+
+                newMonthlyPlan.phases.forEach((phase) => {
+                    // Phase numbers are 1, 2, 3, 4
+                    const weekIdx = phase.phaseNumber - 1; // 0, 1, 2, 3
+                    
+                    for (let d = 0; d < 7; d++) {
+                        const dayDate = new Date(baseWeekStart);
+                        dayDate.setDate(baseWeekStart.getDate() + (weekIdx * 7) + d);
+                        const dayStr = dayDate.toISOString().split('T')[0];
+                        const dayName = daysArr[dayDate.getDay()];
+
+                        const updatedMeals = phase.meals.map((m, mIdx) => ({
+                            ...m,
+                            id: `applied_meal_${phase.phaseNumber}_${mIdx}_${dayStr}_${Math.random()}`,
+                        }));
+
+                        autoPlans[dayStr] = {
+                            date: dayStr,
+                            dayOfWeek: dayName,
+                            meals: updatedMeals,
+                            totalCalories: phase.macros.calories,
+                            totalMacros: {
+                                calories: phase.macros.calories,
+                                carbs: phase.macros.carbs,
+                                protein: phase.macros.protein,
+                                fat: phase.macros.fat,
+                            },
+                            waterGoal: 2.5,
+                            title: `Fase ${phase.phaseNumber} - ${phase.name}`,
+                            notes: `Planejamento mensal estratégico: ${phase.focus}`,
+                        };
+                    }
+                });
+
+                setMealPlan(prev => ({ ...prev, ...autoPlans }));
+
+                // Set today's macro goal with Phase 1 macros
+                if (newMonthlyPlan.phases.length > 0) {
+                     const phase1 = newMonthlyPlan.phases[0];
+                     updateUserData({
+                          macros: {
+                              calories: { current: 0, goal: phase1.macros.calories },
+                              carbs: { current: 0, goal: phase1.macros.carbs },
+                              protein: { current: 0, goal: phase1.macros.protein },
+                              fat: { current: 0, goal: phase1.macros.fat },
+                          }
+                     });
+                }
+            }
+        );
+    }, [userData, addXP, updateUserData]);
     
     const generateDailyPlan = useCallback(async (date: Date) => {
         if (!userData) return;
@@ -609,6 +701,7 @@ const App: FC = () => {
         
         // Plan generation handlers
         generateWeeklyPlan,
+        generateMonthlyPlan,
         generateDailyPlan,
         importPlanFromChat,
         regenerateDay,
@@ -679,13 +772,13 @@ const App: FC = () => {
         return <SubscriptionBlockView onOpenSubscriptionModal={() => setSubscriptionModalOpen(true)} />;
     }
     
-    const themeClass = userData.dietDifficulty === 'athlete' ? 'theme-athlete' : 'theme-light';
+    const themeClass = userData.dietDifficulty === 'athlete' ? 'theme-athlete' : (userData.darkMode ? 'theme-dark' : 'theme-light');
 
     const renderActiveView = () => {
         switch (activeView) {
             case 'Dashboard': return <Dashboard userData={userData} handlers={handlers} setActiveView={setActiveView} mealPlan={mealPlan} />;
             case 'Chat IA': return <ChatView userData={userData} messages={messages} setMessages={setMessages} onNewMealPlanText={onNewMealPlanText} handlers={handlers} />;
-            case 'Dieta': return <PlanoAlimentarView userData={userData} handlers={handlers} lastMealPlanText={lastMealPlanText} mealPlan={mealPlan} favoritePlans={favoritePlans} onToggleFavorite={handleToggleFavoritePlan} setActiveView={setActiveView} showNotification={setNotification} isPlanProcessing={isPlanProcessing} />;
+            case 'Dieta': return <PlanoAlimentarView userData={userData} handlers={handlers} lastMealPlanText={lastMealPlanText} mealPlan={mealPlan} setMealPlan={setMealPlan} favoritePlans={favoritePlans} onToggleFavorite={handleToggleFavoritePlan} setActiveView={setActiveView} showNotification={setNotification} isPlanProcessing={isPlanProcessing} />;
             case 'Progresso': return <ProgressView userData={userData} handlers={handlers} />;
             case 'Favoritos': return <FavoritesView favoritePlans={favoritePlans} onToggleFavorite={handleToggleFavoritePlan} onUseToday={(plan) => { setMealPlan(p => ({...p, [new Date().toISOString().split('T')[0]]: plan})); setActiveView('Dieta'); }} onUpdateFavorite={(plan) => setFavoritePlans(fp => fp.map(p => p.date === plan.date ? plan : p))} />;
             case 'Recursos': return <FeaturesView setActiveView={setActiveView} userData={userData} />;
@@ -702,7 +795,17 @@ const App: FC = () => {
     
 
     return (
-        <div className={`flex h-full bg-slate-50 ${themeClass}`}>
+        <div className={`flex h-full bg-slate-50 ${themeClass} relative overflow-hidden`}>
+            {/* Ambient Background Circles */}
+            <div className="absolute inset-0 overflow-hidden pointer-events-none z-0 select-none">
+                <div className="ambient-mesh-overlay"></div>
+                <div className="ambient-blob blob-1"></div>
+                <div className="ambient-blob blob-2"></div>
+                <div className="ambient-blob blob-3"></div>
+                <div className="ambient-blob blob-4"></div>
+                <div className="ambient-grid-pattern"></div>
+            </div>
+
             <Sidebar activeView={activeView} setActiveView={setActiveView} userData={userData} handlers={handlers} />
             <main className="flex-1 flex flex-col overflow-hidden relative">
                 <div className="flex-1 overflow-y-auto p-4 pb-40 md:p-6 lg:p-8">

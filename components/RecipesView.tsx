@@ -49,6 +49,7 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
     const [error, setError] = useState<string | null>(null);
     const [selectedRecipe, setSelectedRecipe] = useState<Recipe | null>(null);
     const [isImageLoading, setIsImageLoading] = useState(false);
+    const [imageError, setImageError] = useState<string | null>(null);
     const [suggestionIndex, setSuggestionIndex] = useState(0);
     const [isFading, setIsFading] = useState(false);
     const [numRecipesToGenerate, setNumRecipesToGenerate] = useState<1 | 2 | 3>(3);
@@ -104,6 +105,7 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
 
     const handleRecipeClick = (recipe: Recipe) => {
         setSelectedRecipe(recipe);
+        setImageError(null);
     };
 
     const handleGenerateImage = async () => {
@@ -116,6 +118,7 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
         }
 
         setIsImageLoading(true);
+        setImageError(null);
         try {
             const imageUrl = await generateImageFromPrompt(selectedRecipe.imagePrompt);
             onStateChange(prev => ({
@@ -137,8 +140,9 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
                 onToggleFavorite(updatedRecipe); // This implicitly updates the favorite
                 onToggleFavorite(updatedRecipe); // and toggles it back, effectively just updating
             }
-        } catch(e) {
+        } catch(e: any) {
             console.error("Image generation failed:", e);
+            setImageError(e?.message || "Falha ao gerar imagem.");
         } finally {
             setIsImageLoading(false);
         }
@@ -488,12 +492,17 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
 
 
             {selectedRecipe && (
-                <Modal isOpen={!!selectedRecipe} onClose={() => setSelectedRecipe(null)} title={selectedRecipe.title} size="4xl">
-                    <div className="absolute top-[0.875rem] right-16 z-10">
-                         <button onClick={handleFavoriteClick} className="p-2 rounded-full hover:bg-yellow-100 transition-colors" aria-label="Favoritar receita">
-                            <StarIcon className={`w-6 h-6 ${favoriteRecipes.some(r => r.id === selectedRecipe.id) ? 'text-yellow-400 fill-current' : 'text-gray-400'}`} />
+                <Modal 
+                    isOpen={!!selectedRecipe} 
+                    onClose={() => setSelectedRecipe(null)} 
+                    title={selectedRecipe.title} 
+                    size="4xl"
+                    headerAction={
+                        <button onClick={handleFavoriteClick} className="p-2 rounded-full hover:bg-yellow-50/80 transition-colors cursor-pointer" aria-label="Favoritar receita">
+                            <StarIcon className={`w-6 h-6 ${favoriteRecipes.some(r => r.id === selectedRecipe.id) ? 'text-yellow-400 fill-current' : 'text-slate-400 hover:text-slate-500'}`} />
                         </button>
-                    </div>
+                    }
+                >
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                         <div>
                              <div className="aspect-square bg-slate-100 rounded-lg mb-6 flex items-center justify-center overflow-hidden relative group">
@@ -517,6 +526,20 @@ const RecipesView: React.FC<RecipesViewProps> = ({ userData, favoriteRecipes, on
                                         <button onClick={handleGenerateImage} className="bg-slate-800 hover:bg-slate-900 text-white font-semibold py-2 px-4 rounded-lg flex items-center justify-center gap-2 text-sm transition-colors">
                                            <SparklesIcon className="w-4 h-4"/> Gerar imagem com IA
                                         </button>
+                                        {imageError && (
+                                            <div className="mt-3 p-3 text-xs bg-red-50 text-red-700 rounded-lg max-w-sm mx-auto border border-red-100">
+                                                {imageError.includes("PAID_PLAN_UPGRADE_REQUIRED") ? (
+                                                    <span className="block leading-relaxed">
+                                                        ⚠️ <strong>Upgrade do Gemini necessário:</strong> A geração de imagens com IA (Imagen) requer uma conta Gemini paga. Upgrade de conta em{' '}
+                                                        <a href="https://ai.dev/projects" target="_blank" rel="noopener noreferrer" className="underline font-bold text-red-900 hover:text-red-950">
+                                                            ai.dev/projects
+                                                        </a>.
+                                                    </span>
+                                                ) : (
+                                                    <span>{imageError}</span>
+                                                )}
+                                            </div>
+                                        )}
                                         {imageGenUses.limit !== Infinity && ( // FIX: Use imageGenUses here
                                             <p className="text-xs text-slate-400 mt-2">
                                                 Gerações de imagem restantes: <strong>{imageGenUses.remaining} / {imageGenUses.limit}</strong>

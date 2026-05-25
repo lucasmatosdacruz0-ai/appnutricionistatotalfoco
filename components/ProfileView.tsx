@@ -255,6 +255,35 @@ const ProfileView: FC<ProfileViewProps> = ({ userData, handlers, setActiveView }
                 </div>
             </div>
 
+            {userData.dietDifficulty !== 'athlete' && (
+                <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 theme-dark:bg-slate-800 theme-dark:border-slate-700">
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2 theme-dark:text-slate-100">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5 text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                                </svg>
+                                Modo Escuro
+                            </h3>
+                            <p className="text-sm text-slate-500 theme-dark:text-slate-400">Ative o modo escuro simplificado para os modos de dificuldade Fácil/Normal.</p>
+                        </div>
+                        <button 
+                            type="button"
+                            onClick={() => handlers.updateUserData({ darkMode: !userData.darkMode })}
+                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${userData.darkMode ? 'bg-brand-green' : 'bg-gray-200'}`}
+                            role="switch"
+                            aria-checked={userData.darkMode}
+                        >
+                            <span className="sr-only">Ativar modo escuro</span>
+                            <span
+                                aria-hidden="true"
+                                className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${userData.darkMode ? 'translate-x-5' : 'translate-x-0'}`}
+                            />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <CollapsibleCard
                 title="Dados Pessoais"
                 icon={<UserIcon className="w-6 h-6 text-indigo-500" />}

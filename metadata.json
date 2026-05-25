@@ -2,5 +2,8 @@
   "name": "corrigir edit nutribot + foco total upar",
   "description": "upar sem login",
   "requestFramePermissions": [],
-  "prompt": ""
+  "prompt": "",
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

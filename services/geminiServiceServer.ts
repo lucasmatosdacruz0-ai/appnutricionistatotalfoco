@@ -1,9 +1,42 @@
 import { GoogleGenAI, Part } from "@google/genai";
-import { DailyPlan, Meal, UserData, MacroData, Recipe, FoodItem } from '../types';
-import { sanitizeRecipe, sanitizeDailyPlan } from "../components/utils/sanitizers";
+import { DailyPlan, Meal, UserData, MacroData, Recipe, FoodItem, MonthlyDietPlan } from '../types';
+import { sanitizeRecipe, sanitizeDailyPlan, sanitizeMeal } from "../components/utils/sanitizers";
 
-// Initialize the client directly using the env variable.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+let aiClient: GoogleGenAI | null = null;
+
+function getAI(): GoogleGenAI {
+    if (!aiClient) {
+        let apiKey = process.env.GEMINI_API_KEY;
+        
+        // Safe fallback to API_KEY only if it appears to be a valid Google API key
+        if (!apiKey && process.env.API_KEY) {
+            if (process.env.API_KEY.startsWith("AIzaSy")) {
+                apiKey = process.env.API_KEY;
+            } else {
+                console.warn("The API_KEY environment variable exists but is not passed because it doesn't start with 'AIzaSy' (standard Google API Key format).");
+            }
+        }
+
+        const config: any = {};
+        if (apiKey && apiKey.trim() !== '') {
+            config.apiKey = apiKey;
+        } else {
+            console.warn("GEMINI_API_KEY environment variable is missing or empty.");
+        }
+
+        // Safely log the key metadata to assist debugging without leaking secrets
+        console.log("Initializing Gemini Client - API Key status:", {
+            hasGeminiKey: !!process.env.GEMINI_API_KEY,
+            hasApiKeyEnv: !!process.env.API_KEY,
+            usedKeyResolved: !!apiKey,
+            keyPrefix: apiKey ? apiKey.substring(0, 6) : "none",
+            keyLength: apiKey ? apiKey.length : 0
+        });
+
+        aiClient = new GoogleGenAI(config);
+    }
+    return aiClient;
+}
 
 // Helper to build the user profile string for prompts
 function buildUserProfile(userData: UserData): string {
@@ -24,7 +57,7 @@ function buildUserProfile(userData: UserData): string {
  */
 async function generateJson<T>(prompt: string | { parts: Part[] }, model: string = 'gemini-2.5-flash'): Promise<T> {
     try {
-        const response = await ai.models.generateContent({
+        const response = await getAI().models.generateContent({
             model,
             contents: prompt,
             config: { 
@@ -79,8 +112,16 @@ export const parseMealPlanText = async (text: string): Promise<DailyPlan> => {
     return sanitized;
 };
 
-export const generateDailyPlan = async (userData: UserData, date: Date): Promise<DailyPlan> => {
-    const dateString = date.toISOString().split('T')[0];
+export const generateDailyPlan = async (userData: UserData, date: Date | string): Promise<DailyPlan> => {
+    let dateObj: Date;
+    if (date instanceof Date) {
+        dateObj = date;
+    } else if (typeof date === 'string') {
+        dateObj = new Date(date);
+    } else {
+        dateObj = new Date();
+    }
+    const dateString = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split('T')[0] : String(date);
     const userProfile = buildUserProfile(userData);
     
     const prompt = `Atue como nutricionista. Crie um plano alimentar completo (1 dia) para ${dateString}.
@@ -135,8 +176,16 @@ export const adjustDailyPlanForMacro = async (userData: UserData, currentPlan: D
     return sanitized;
 };
 
-export const generateWeeklyPlan = async (userData: UserData, weekStartDate: Date, observation?: string): Promise<Record<string, DailyPlan>> => {
-    const dateString = weekStartDate.toISOString().split('T')[0];
+export const generateWeeklyPlan = async (userData: UserData, weekStartDate: Date | string, observation?: string): Promise<Record<string, DailyPlan>> => {
+    let dateObj: Date;
+    if (weekStartDate instanceof Date) {
+        dateObj = weekStartDate;
+    } else if (typeof weekStartDate === 'string') {
+        dateObj = new Date(weekStartDate);
+    } else {
+        dateObj = new Date();
+    }
+    const dateString = !isNaN(dateObj.getTime()) ? dateObj.toISOString().split('T')[0] : String(weekStartDate);
     const userProfile = buildUserProfile(userData);
     
     // Otimização: Pedir 5 dias em um array JSON simples para evitar timeout
@@ -232,7 +281,7 @@ export const findRecipes = async (query: string, userData: UserData, numRecipes:
 
 export const generateImageFromPrompt = async (prompt: string): Promise<string> => {
     try {
-        const response = await ai.models.generateImages({
+        const response = await getAI().models.generateImages({
             model: 'imagen-4.0-generate-001',
             prompt: prompt,
             config: { numberOfImages: 1, outputMimeType: 'image/jpeg' }
@@ -242,9 +291,13 @@ export const generateImageFromPrompt = async (prompt: string): Promise<string> =
         if (!imageBytes) throw new Error("A IA não retornou imagem.");
         
         return `data:image/jpeg;base64,${imageBytes}`;
-    } catch (error) {
+    } catch (error: any) {
         console.error("Image Gen Error:", error);
-        throw new Error("Falha ao gerar imagem.");
+        const errMsg = error?.message || (typeof error === 'object' ? JSON.stringify(error) : String(error));
+        if (errMsg.includes("paid plans") || errMsg.includes("upgrade your account") || errMsg.includes("Imagen 3 is only available")) {
+            throw new Error("PAID_PLAN_UPGRADE_REQUIRED: Imagen is only available on paid plans. Please upgrade your account at https://ai.dev/projects.");
+        }
+        throw new Error("Falha ao gerar imagem: " + (error?.message || errMsg));
     }
 };
 
@@ -257,7 +310,7 @@ export async function* sendMessageToAI(message: string, history: any[]) {
     }));
     contents.push({ role: 'user', parts: [{ text: message }] });
 
-    const resultStream = await ai.models.generateContentStream({
+    const resultStream = await getAI().models.generateContentStream({
         model: 'gemini-2.5-flash',
         contents,
     });
@@ -278,7 +331,7 @@ export const analyzeMealFromImage = async (imageDataUrl: string): Promise<MacroD
     
     const prompt = "Analise os macros desta comida. Retorne JSON: { calories, carbs, protein, fat } (números).";
     
-    const response = await ai.models.generateContent({
+    const response = await getAI().models.generateContent({
         model: 'gemini-2.5-flash',
         contents: { parts: [{ inlineData: { mimeType, data: base64Data } }, { text: prompt }] },
         config: { responseMimeType: "application/json" }
@@ -290,19 +343,123 @@ export const analyzeMealFromImage = async (imageDataUrl: string): Promise<MacroD
 
 export const analyzeProgress = async (userData: UserData): Promise<string> => {
     const prompt = `Analise o progresso. Resumo curto e motivador.\n${buildUserProfile(userData)}`;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+    const response = await getAI().models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
     return response.text || "";
 };
 
 export const generateShoppingList = async (weekPlan: DailyPlan[]): Promise<string> => {
     const simplified = weekPlan.map(d => `${d.dayOfWeek}: ${d.meals.map(m => m.name).join(', ')}`);
     const prompt = `Gere lista de compras Markdown com checkboxes baseada nestes dias: ${JSON.stringify(simplified)}`;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+    const response = await getAI().models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
     return response.text || "";
 };
 
 export const getFoodInfo = async (question: string, mealContext?: Meal): Promise<string> => {
     const prompt = `Responda curto (max 60 palavras): "${question}" ${mealContext ? `(Contexto: ${mealContext.name})` : ''}`;
-    const response = await ai.models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
+    const response = await getAI().models.generateContent({ model: 'gemini-2.5-flash', contents: prompt });
     return response.text || "";
+};
+
+export const generateMonthlyPlan = async (userData: UserData, observation?: string): Promise<MonthlyDietPlan> => {
+    const userProfile = buildUserProfile(userData);
+    
+    const prompt = `Você é um excelente Nutricionista de inteligência artificial de alta performance.
+    Crie uma dieta mensal (estratégia nutricional de 4 fases semanais progressivas) baseada no perfil abaixo.
+    
+    ${userProfile}
+    ${observation ? `OBSERVAÇÕES ADICIONAIS: ${observation}` : ''}
+    
+    RETORNE ESTRITAMENTE UM OBJETO JSON com a seguinte estrutura de interface em português:
+    {
+      "title": "Título elegante (ex: Plano de Reconfiguração Corporal)",
+      "description": "Uma visão geral estratégica do plano mensal de 4 semanas.",
+      "phases": [
+         {
+           "phaseNumber": 1,
+           "name": "Nome da Fase 1 (ex: Adaptação Metabólica)",
+           "duration": "Semana 1",
+           "focus": "Foco principal desta semana",
+           "macros": {
+             "calories": 2000,
+             "carbs": 250,
+             "protein": 150,
+             "fat": 67
+           },
+           "meals": [
+             {
+               "id": "m11",
+               "name": "Café da Manhã",
+               "time": "08:00",
+               "items": [
+                 { "name": "Item 1", "portion": "Quantidade", "calories": 200, "carbs": 25, "protein": 10, "fat": 5 }
+               ],
+               "totalCalories": 200,
+               "totalMacros": { "calories": 200, "carbs": 25, "protein": 10, "fat": 5 }
+             }
+           ],
+           "lifestyleTips": ["Conselhos específicos de hábitos para esta semana"],
+           "shoppingListExcerpt": ["Itens chave recomendados para a despensa"]
+         }
+      ]
+    }
+    
+    Importante: Preencha todas as 4 fases completas (Semanas de 1 a 4). Cada fase deve ter entre 3 e 5 refeições completas bem detalhadas. Retorne APENAS o JSON válido. Seja conciso e direto nos nomes de alimentos para evitar textos truncados.`;
+
+    const raw = await generateJson<any>(prompt);
+    
+    const id = "monthly_" + Math.random().toString(36).substring(2, 9);
+    const createdAt = new Date().toISOString();
+    
+    const phases = (raw.phases || []).map((phase: any, index: number) => {
+        const phNo = phase.phaseNumber || (index + 1);
+        const name = phase.name || `Fase ${phNo}`;
+        const duration = phase.duration || `Semana ${phNo}`;
+        const focus = phase.focus || "Evolução nutricional contínua.";
+        
+        const macros = phase.macros || {
+            calories: userData.macros.calories.goal,
+            carbs: userData.macros.carbs.goal,
+            protein: userData.macros.protein.goal,
+            fat: userData.macros.fat.goal,
+        };
+        
+        const meals = (phase.meals || []).map((meal: any, mIdx: number) => {
+            const sanitizedMeal = sanitizeMeal(meal);
+            if (!sanitizedMeal) {
+                return {
+                    id: `m_${phNo}_${mIdx}`,
+                    name: `Refeição ${mIdx + 1}`,
+                    time: "08:00",
+                    items: [],
+                    totalCalories: 0,
+                    totalMacros: { calories: 0, carbs: 0, protein: 0, fat: 0 }
+                };
+            }
+            return {
+                ...sanitizedMeal,
+                id: meal.id || `m_${phNo}_${mIdx}`,
+                name: meal.name || sanitizedMeal.name,
+                time: meal.time || sanitizedMeal.time,
+            };
+        });
+        
+        return {
+            phaseNumber: phNo,
+            name,
+            duration,
+            focus,
+            macros,
+            meals,
+            lifestyleTips: phase.lifestyleTips || ["Beba bastante água diariamente", "Mantenha a regularidade nos horários"],
+            shoppingListExcerpt: phase.shoppingListExcerpt || ["Proteínas magras", "Vegetais frescos"]
+        };
+    });
+    
+    return {
+        id,
+        createdAt,
+        title: raw.title || "Estratégia Nutricional de 4 Semanas",
+        description: raw.description || "Um plano progressivo de 4 semanas desenvolvido de forma personalizada para você.",
+        phases
+    };
 };

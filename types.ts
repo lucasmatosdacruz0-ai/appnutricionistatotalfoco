@@ -100,6 +100,11 @@ export interface WeeklyUsage {
     imageGen: number;
 }
 
+export interface MonthlyUsage {
+    monthStartDate: string; // YYYY-MM
+    monthlyPlanGenerations: number;
+}
+
 export interface UserData {
     isRegistered: boolean;
     name: string;
@@ -135,16 +140,20 @@ export interface UserData {
     perfectDaysCount: number;
     featuredAchievementId: string | null;
     hasCompletedTutorial: boolean;
+    darkMode?: boolean;
     adminSettings?: AdminSettings;
     isSubscribed: boolean;
     trialEndDate: string; // ISO String
     freeImagesGenerated: number;
     currentPlan: PlanKey | null;
     billingCycle: 'monthly' | 'annual' | null;
+    monthlyDietPlans?: MonthlyDietPlan[];
+    activeMonthlyDietPlanId?: string | null;
     
     // Granular, time-based usage tracking
     dailyUsage: DailyUsage;
     weeklyUsage: WeeklyUsage;
+    monthlyUsage: MonthlyUsage;
     purchasedUses?: { [key: string]: number };
 
     // Nutritionist specific fields
@@ -171,6 +180,7 @@ export interface UserDataHandlers {
     
     // Plan generation handlers
     generateWeeklyPlan: (startDate: Date, observation?: string) => Promise<void>;
+    generateMonthlyPlan: (observation?: string) => Promise<void>;
     generateDailyPlan: (date: Date) => Promise<void>;
     importPlanFromChat: (text: string) => Promise<void>;
     regenerateDay: (date: string, mealCount?: number) => Promise<void>;
@@ -278,4 +288,28 @@ export interface TutorialStep {
   description: string;
   position?: 'top' | 'bottom' | 'left' | 'right' | 'center';
   requiresElement?: boolean;
+}
+
+export interface MonthlyPhase {
+    phaseNumber: number; // 1, 2, 3, 4
+    name: string;
+    duration: string;
+    focus: string;
+    macros: {
+        calories: number;
+        carbs: number;
+        protein: number;
+        fat: number;
+    };
+    meals: Meal[]; // Template meals for this phase
+    lifestyleTips: string[];
+    shoppingListExcerpt: string[];
+}
+
+export interface MonthlyDietPlan {
+    id: string; // unique ID
+    createdAt: string; // ISO Date
+    title: string;
+    description: string;
+    phases: MonthlyPhase[];
 }

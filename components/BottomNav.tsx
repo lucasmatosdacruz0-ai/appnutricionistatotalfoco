@@ -12,7 +12,7 @@ const BottomNav: React.FC<BottomNavProps> = ({ activeView, setActiveView }) => {
   const navItemsForBottomBar = NAV_ITEMS.filter(item => item.name !== 'Dashboard' && item.name !== 'Dieta');
 
   return (
-    <nav id="bottom-nav" className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex md:hidden z-10 shadow-[0_-2px_5px_rgba(0,0,0,0.05)] theme-athlete:bg-slate-900 theme-athlete:border-slate-700">
+    <nav id="bottom-nav" className="fixed bottom-0 left-0 right-0 bg-white/85 backdrop-blur-md border-t border-gray-200 flex md:hidden z-10 shadow-[0_-2px_5px_rgba(0,0,0,0.05)] theme-athlete:bg-slate-900/85 theme-athlete:backdrop-blur-md theme-athlete:border-slate-700 theme-dark:bg-slate-900/85 theme-dark:backdrop-blur-md theme-dark:border-slate-800">
       {navItemsForBottomBar.map((item) => {
         const isFocoTotal = item.name === 'Foco Total';
         const isActive = activeView === item.name;
